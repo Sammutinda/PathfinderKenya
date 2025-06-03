@@ -1,0 +1,759 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pathFinder Kenya by Acres of Mercy</title>
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/babel-standalone@6.26.0/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore.js"></script>
+</head>
+<body class="bg-green-50 font-sans">
+  <div id="root" class="min-h-screen flex flex-col items-center justify-center p-4"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    // Firebase Config (Replace with your Firebase project config)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Translations
+    const translations = {
+      en: {
+        appName: "PathFinder Kenya",
+        startDesc: "Help your Grade 9 child choose their Senior Secondary pathway (Grades 10–12) for only Kshs 30! Take our CBC-aligned test, then check your school placement at selection.education.go.ke.",
+        payButton: "Pay Kshs 30 to Start Test",
+        adminLogin: "Admin Login",
+        paymentTitle: "Payment for",
+        paymentDesc: "Pay Kshs 30 via M-Pesa to take the PathFinder Kenya test.",
+        paymentInstructions: "Instructions:\n1. Enter your M-Pesa registered phone number (e.g., 254712345678).\n2. Click 'Initiate Payment' to receive an STK Push prompt.\n3. Enter your M-Pesa PIN on your phone to confirm the Kshs 30 payment.\n4. Wait for confirmation to start the test.",
+        phonePlaceholder: "Enter phone number (e.g., 254712345678)",
+        initiatePayment: "Initiate Payment",
+        back: "Back",
+        quizTitleStudent: "Student Test for",
+        quizTitleParent: "Parent Test",
+        answeringAs: "Answering as",
+        question: "Question",
+        of: "of",
+        student: "Student",
+        parent: "Parent",
+        plannerTitle: "Pathway Planner for",
+        plannerDesc: "Drag and drop to rank your top two pathway preferences.",
+        availablePathways: "Available Pathways",
+        yourPreferences: "Your Preferences",
+        submitPreferences: "Submit Preferences",
+        resultsTitle: "Pathway Results for",
+        testScore: "Test Score",
+        preferences: "Preferences",
+        matchScore: "Match Score",
+        keySubjects: "Key Subjects",
+        sampleCareers: "Sample Careers",
+        topSchools: "Top Schools",
+        nextSteps: "Next Steps",
+        nextStepsDesc: "Check your Senior Secondary school placement at the Ministry of Education’s Grade 10 Selection System.",
+        visitSelection: "Visit selection.education.go.ke",
+        howToCheck: "How to Check: Sign in with your KJSEA index number, select your county and sub-county, and view your assigned school. Download your admission letter and have it endorsed by your primary school headteacher.",
+        parentTips: "Parent Tips",
+        parentTipsDesc: "- Discuss your child’s test results with teachers.\n- Attend CBC career guidance sessions.\n- Check placement at selection.education.go.ke.\n- Encourage school clubs to develop talents.",
+        downloadReport: "Download Report",
+        adminTitle: "Admin Login",
+        adminPassword: "Enter admin password",
+        adminDashboard: "Admin Dashboard",
+        pathwayPopularity: "Pathway Popularity",
+        studentDetails: "Student Details",
+        name: "Name",
+        selectedPathway: "Selected Pathway",
+        rankedPreferences: "Ranked Preferences",
+        answers: "Answers",
+        correct: "Correct",
+        incorrect: "Incorrect",
+      },
+      sw: {
+        appName: "NjiaFinder Kenya",
+        startDesc: "Saidia mtoto wako wa Gredi 9 kuchagua njia yao ya Sekondari ya Juu (Gredi 10–12) kwa Kshs 30 tu! Chukua mtihani wetu unaolingana na CBC, kisha angalia uchaguzi wa shule kwenye selection.education.go.ke.",
+        payButton: "Lipa Kshs 30 Kuanza Mtihani",
+        adminLogin: "Ingia kwa Msimamizi",
+        paymentTitle: "Malipo ya",
+        paymentDesc: "Lipa Kshs 30 kupitia M-Pesa kuchukua mtihani wa NjiaFinder Kenya.",
+        paymentInstructions: "Maagizo:\n1. Ingiza nambari yako ya simu iliyosajiliwa na M-Pesa (mfano, 254712345678).\n2. Bonyeza 'Anzisha Malipo' kupokea ombi la STK Push.\n3. Ingiza PIN yako ya M-Pesa kwenye simu yako kuthibitisha malipo ya Kshs 30.\n4. Subiri uthibitisho kuanza mtihani.",
+        phonePlaceholder: "Ingiza nambari ya simu (mfano, 254712345678)",
+        initiatePayment: "Anzisha Malipo",
+        back: "Rudi Nyuma",
+        quizTitleStudent: "Mtihani wa Mwanafunzi kwa",
+        quizTitleParent: "Mtihani wa Mzazi",
+        answeringAs: "Kujibu kama",
+        question: "Swali",
+        of: "ya",
+        student: "Mwanafunzi",
+        parent: "Mzazi",
+        plannerTitle: "Mpangaji wa Njia kwa",
+        plannerDesc: "Buruta na achia ili kupanga chaguo zako za juu za njia mbili.",
+        availablePathways: "Njia Zilizopo",
+        yourPreferences: "Chaguo Zako",
+        submitPreferences: "Wasilisha Chaguo",
+        resultsTitle: "Matokeo ya Njia kwa",
+        testScore: "Alama za Mtihani",
+        preferences: "Chaguo",
+        matchScore: "Alama za Kufanana",
+        keySubjects: "Masomo ya Msingi",
+        sampleCareers: "Mifano ya Kazi",
+        topSchools: "Shule za Juu",
+        nextSteps: "Hatua Zifuatazo",
+        nextStepsDesc: "Angalia uchaguzi wako wa shule ya Sekondari ya Juu kwenye Mfumo wa Uchaguzi wa Gredi 10 wa Wizara ya Elimu.",
+        visitSelection: "Tembelea selection.education.go.ke",
+        howToCheck: "Jinsi ya Kuangalia: Ingia kwa nambari yako ya KJSEA, chagua kaunti yako na kaunti ndogo, na uone shule uliyopewa. Pakua barua yako ya kujiunga na uithibitishe na mwalimu wako mkuu wa shule ya msingi.",
+        parentTips: "Vidokezo vya Mzazi",
+        parentTipsDesc: "- Jadili matokeo ya mtihani wa mtoto wako na walimu.\n-Hudhuria vipindi vya mwongozo wa kazi shuleni.\n-Angalia uchaguzi kwenye selection.education.go.ke.\n-Mhimize mtoto wako kujiunga na vilabu vya shule kukuza talanta.",
+        downloadReport: "Pakua Ripoti",
+        adminTitle: "Ingia kwa Msimamizi",
+        adminPassword: "Ingiza nenosiri la msimamizi",
+        adminDashboard: "Dashbodi ya Msimamizi",
+        pathwayPopularity: "Umaarufu wa Njia",
+        studentDetails: "MaElezo ya Wanafunzi",
+        name: "Jina",
+        selectedPathway: "Njia Iliyochaguliwa",
+        rankedPreferences: "Chaguo Zilizopangwa",
+        answers: "Majibu",
+        correct: "yes",
+        incorrect: "no",
+      },
+    };
+
+    const pathways = [
+      {
+        name: "STEM (Science description: Translation, Engineering, Math),
+        Mathematics": "Sayansi, Teknolojia, Uhandisi, Hisabati",
+        description: "Kwa wanafunzi wanaopenda kutatua matatizo na ujuzi wa teknologia. Inawaandaa kwa kazi kama muuguzi au fundi umeme.",
+        subjects: ["Mathematics", "Biology", "Chemistry", "Physics", "Mathematics": ["Hisabati", "Mathematics", "Biolojia", "Biology", "Kemia", "Chemistry", "Fizikia", "Physics", "Masomo ya Kompyuta", "Computer Studies"],
+        careers: ["Muuguzi", "Fundi Umeme", "Mtaalamu wa IT"],
+        schools: ["Shule ya Upili ya Alliance", "Starehe Boys’ Centre", "Kabianga High School"],
+        competencies: ["problem-solving", "critical thinking", "digital literacy"],
+      },
+      {
+        name: "Social Sciences",
+        description: "Kwa wanafunzi wanaovutiwa na jamii na uongozi. Inawasua kwa kazi kama mwalimu au mwandishi wa habari.",
+        subjects: ["Historia", "History", "Jiografia", "Geography", "Kiswahili", "English", "Masomo ya Biashara", "English": ["Business Studies"],
+        careers: ["Mwalimu", "Mhudumu wa Jamii", "Mwandishi wa Habari"],
+        schools: ["Pangani ya Wasichana", "Shule ya Upili ya Kenya", "High school", "Moi Forces Academy"],
+        competencies: ["communication", "collaboration", "citizenship", "citizenship"],
+      },
+      {
+        name: "Arts & Sports",
+        description: "Kwa wanafunzi wabunifu au wachezaji wanaopendelea sanaa au michezo. Inawasua kwa kazi kama mwanamuziki au mwanariadha.",
+        subjects: ["Muziki", "Music", "Sanaa na Ubunifu", "Art & Design", "Elimu ya Michezo", "Physical Education", "Kiingereza", "English"],
+        careers: ["Mwanamuzika", "Mwanariadha", "Mbuni Grafiki", "Musician", "Athlete", "Graphic Designer"],
+        schools: ["Shule ya Upili ya Mang'u", "Mangu High School", "Shule ya Lenana", "Lenana School", "Shule ya St. Mary’s", "St Mary’s School"],
+        competencies: ["creativity", "self expression", "collaboration", "self-expression"],
+      },
+    ];
+
+    const questions = [
+      // Student Questions (20)
+      { text: "Do you enjoy solving math or science problems?", swahili: "Je, unafurahia kutatua ya hesabu au sayansi?", competency: "problem-solving", for: "student", correct: "yes" },
+      { text: "Are you good at using computers or technology?", swahili: "Je, wewe ni hodari katika kutumia kompyuta au teknolojia?", competency: "digital-literacy", for: "student", correct: "yes" },
+      { text: "Do you like conducting science experiments?", swahili: "Je, unapenda kufanya majaribio ya sayansi?", competency: "critical-thinking", for: "student", correct: "yes" },
+      { text: "Do you enjoy building or repairing things?", swahili: "Je, unapenda kujenga au kutengeneza vitu?", competency: "problem-solving", for: "student", correct: "yes" },
+      { text: "Do you like helping people in your community?", swahili: "Je, unapenda kuwasaidia watu katika jamii yako?", competency: "citizenship", for: "student", correct: "yes" },
+      { text: "Are you good at explaining ideas to others?", swahili: "Je, wewe ni hodari katika kueleza mawazo kwa wengine?", competency: "communication", for: "student", correct: "yes" },
+      { text: "Do you enjoy studying history or culture?", swahili: "Je, unapenda kusoma historia au utamaduni?", competency: "citizenship", for: "student", correct: "yes" },
+      { text: "Do you work well in teams?", swahili: "Je, unafanya kazi vizuri katika timu?", competency: "collaboration", for: "student", correct: "yes" },
+      { text: "Do you enjoy drawing, painting, or music?", swahili: "Je, unapenda kuchora, kuchanga, au muziki?", competency: "creativity", for: "student", correct: "yes" },
+      { text: "Are you good at sports or physical activities?", swahili: "Je, wewe ni hodari katika michezo au shughuli za kimwili?", competency: "self-expression", for: "student", correct: "yes" },
+      { text: "Do you like creating stories or designs?", swahili: "Je, unapenda kuunda hadithi au miundo?", competency: "creativity", for: "student", correct: "yes" },
+      { text: "Do you take responsibility for schoolwork?", swahili: "Je, unachukua wajibu wa kazi ya shule?", competency: "citizenship", for: "student", correct: "yes" },
+      { text: "Do you enjoy solving real-life challenges?", swahili: "Je, unapenda kutatua changamoto za maisha halisi?", competency: "problem-solving", for: "student", correct: "yes" },
+      { text: "Are you curious about how machines work?", swahili: "Je, una shauku ya jinsi mashini zinavyofanya kazi?", competency: "problem-solving", for: "student", correct: "yes" },
+      { text: "Do you enjoy designing or inventing new things?", swahili: "Je, unapenda kubuni au kuvumbua vitu vipya?", competency: "creativity", for: "student", correct: "yes" },
+      { text: "Are you interested in learning about coding or apps?", swahili: "Je, unavutiwa na kusoma kuhusu coding au maombi?", competency: "digital literacy", for: "student", correct: "digital-literacy", yes: "yes" },
+      { text: "Do you like leading group projects or activities?", swahili: "Je, unapenda kuongoza miradi ya kikundi au shughuli?", competency: "collaboration", for: "student", correct: "leadership", yes: "yes" },
+      { text: "Are you good at playing a musical instrument?", swahili: "Je, wewe ni hodari katika kucheza ala ya muziki?", competency: "creativity", for: "student", correct: "yes" },
+      { text: "Do you enjoy debating or discussing ideas?", swahili: "Je, unapenda kujadiliana au kujadili mawazo?", competency: "communication", for: "student", correct: "yes" },
+      { text: "Are you interested in environmental conservation?", swahili: "Je, unavutiwa na uhifadhi wa mazingira?", competency: "citizenship", for: "student", correct: "yes" },
+      // Parent Questions (10)
+      { text: "Should your child learn practical skills for jobs?", swahili: "Je, mtoto wako anapaswa kujifunza ujuzi wa vitendo kwa ajili za kazi?", competency: "problem-solving", for: "parent", correct: "yes" },
+      { text: "Is it important for your child to study technology?", swahili: "Je, ni muhimu kwa mtoto wako kusoma teknolojia?", competency: "digital-literacy", for: "parent", correct: "yes" },
+      { text: "Do you value community service for your child?", swahili: "Je, unathamini huduma za jamii kwa mtoto wako?", competency: "citizenship", for: "parent", correct: "yes" },
+      { text: "Should your child learn about society and people?", swahili: "Je, mtoto wako anapaswa kujifunza kuhusu jamii na watu?", competency: "communication", for: "parent", correct: "yes" },
+      { text: "Do you want your child to develop creative talents?", swahili: "Je, unataka mtoto wako aendeleze talanta za ubunifu?", competency: "creativity", for: "parent", correct: "yes" },
+      { text: "Is physical activity important for your child?", swahili: "Je, shughuli za kimwili ni muhimu kwa mtoto wako?", competency: "self-expression", for: "parent", correct: "yes" },
+      { text: "Should your child pursue entrepreneurial skills?", swahili: "Je, mtoto wako anapaswa kufuata ujuzi wa ujasiriamali?", competency: "problem-solving", for: "parent", correct: "yes" },
+      { text: "Is leadership development important for your child?", swahili: "Je, maendeleo ya uongozi ni muhimu kwa mtoto wako?", competency: "collaboration", for: "parent", correct: "yes" },
+      { text: "Should your child explore creative arts like music?", swahili: "Je, mtoto wako anapaswa kuchunguza sanaa za ubunifu kama muziki?", competency: "creativity", for: "parent", correct: "yes" },
+      { text: "Is it important for your child to learn financial skills?", swahili: "Je, ni muhimu kwa mtoto wako kujifunza ujuzi wa kifedha?", competency: "citizenship", for: "parent", correct: "yes" },
+    ];
+
+    const PaymentScreen = ({ language, studentName, setView }) => {
+      const [phoneNumber, setPhoneNumber] = useState("");
+      const [isLoading, setPaymentLoading] = useState(false);
+      const t = translations[language];
+
+      const handlePayment = () => {
+        if (!phoneNumber.match(/^\^2547\d{8}$/)) {
+          alert(t === "Please enter a valid Kenyan phone number (e.g., 254712345678).");
+          return;
+        }
+        setPaymentLoading(true);
+        $.ajax({
+          url: "https://your-render-backend.onrender.com/initiate-payment", // Replace with your Render backend URL
+          method: "POST",
+          contentType: contentType="application/json",
+          data: JSON.stringify({
+            phoneNumber: phoneNumber,
+            amount: 30,
+            accountReference: studentName.replace(/\s/g, ""),
+          }),
+          success: (response) => {
+            setIsLoading(false);
+            if (response.success) {
+              alert(t === "Payment initiated! Check payment! Initiated! Check your phone for payment prompt and enter your PIN.");
+              checkPaymentStatus(response.checkoutRequestID, setView);
+            } else {
+              alert(`${t.paymentDesc} Failed payment: ${t.paymentInitiated} + ${response.message}`);
+            }
+          } else {
+            error: () => {
+              setIsLoading(false);
+              alert(`${t.paymentTitle} Error connecting to payment server.`);
+            }
+          },
+        });
+      };
+
+      const checkPaymentStatus = (checkoutRequestID, setView) => {
+        const interval = setInterval(() => {
+          $.ajax({
+            url: "https://your-render-backend.onrender.com/check-payment",
+            method: "POST",
+            contentType: contentType="application/json",
+            data: JSON.stringify({ checkoutRequestID: checkoutRequestID }),
+            success: (response) => {
+              if (response.success && response.status === "success") {
+                clearInterval(interval);
+                setView("successful quiz");
+              } else if (response.success && response.status === "failed") {
+                clearInterval(interval);
+                alert("Payment failed or payment timed out. Please try again.");
+              }
+            } else {
+              error: () => {
+                clearInterval(interval);
+                alert("Error checking payment status. Please try again.");
+              }
+            };
+          });
+        }, 5000); // Poll every 5 seconds
+        }, 5000);
+      };
+
+      return (
+        <div className="container bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+          <h2 className="text-xl font-bold text-center mb-4">{t.paymentTitle} {t.studentName}</h2>
+          <p className="text-lg text-gray-700 mb-4">{t.paymentDesc}</p>
+          <p className="text-sm text-gray-600 mb-4">{t.paymentInstructions}</p>
+          <input
+            type="text"
+            placeholder={t.phonePlaceholder}
+            className="input-field w-full p-2 mb-4 border rounded"
+            value={phoneNumber}
+            onChange={(e) => setPhoneNumber(e.target.value)}
+          />
+          <button
+            className="button bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            onClick={handlePayment}
+            disabled={isLoading}
+          >
+            {isPaymentLoading ? "Processing..." : t.initiatePayment}
+          </button>
+          <button
+            className="mt-4 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            onClick={() => setView("back to start")}
+          >
+            {t.back}
+          </button>
+        </div>
+      );
+    };
+
+    const Quiz = ({ language, setResults, studentName, setStudentData, setView }) => {
+      const [currentQuestion, setCurrentQuestion] = useState(0);
+      const [competencies, setCompetencies] = useState([]);
+      const [answers, setAnswers] = useState([]);
+      const [userType, setUserType] = useState("student");
+      const t = translations[language];
+
+      const handleAnswer = async (answer) => {
+        const isCorrect = answer === questions[currentQuestion].correct;
+        setAnswers([...answers, { question: questions[currentQuestion][language === "sw" ? "swahili" : "text"], answer, isCorrect }]);
+        if (answer === "yes") {
+          setCompetencies([...competencies, questions[currentQuestion].competency]);
+        }
+        if (currentQuestion < questions.length - 1) {
+          const nextQuestion = currentQuestion + 1;
+          if (questions[nextQuestion].for === userType || questions[nextQuestion].for === "both") {
+            setCurrentQuestion(nextQuestion);
+          } else {
+            setUserType(userType === "student" ? "parent" : "student");
+          }
+        } else {
+          const scores = pathways.map((pathway) => {
+            const matchCount = pathway.competencies.filter((comp) =>
+              competencies.includes(comp)
+            ).length;
+            return {
+              ...pathway,
+              score: (matchCount / pathway.competencies.length) * 100,
+            };
+          });
+          const topPathway = scores.sort((a, b) => b.score - a.score)[0];
+          const score = answers.filter((a) => a.isCorrect).length);
+          const studentData = {
+            name: studentName,
+            pathway: topPathway.name,
+            score: score,
+            answers: answers,
+            preferences: [],
+            timestamp: new Date().toISOString(),
+          };
+          await db.collection("students").doc(`${studentName}-${new Date().toISOString()}`).set(studentData);
+          setStudentData(studentData);
+          setResults(scores.sort((a, b) => b.score - a.score));
+          setView("planner");
+        });
+      };
+
+      return (
+        <div className="container bg-white shadow-lg p-6 rounded-lg max-w-md w-full">
+          <h2 className="text-xl font-bold text-center mb-4">
+            {userType === "student" ? `${t.quizTitleStudent} ${studentName}` : t.quizTitleParent}
+          </h2>
+          <p className="text-lg mb-4">{questions[currentQuestion][language === "sw" ? "swahili" : "text"]}</p>
+          <div className="flex justify-center gap-4">
+            <button
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              onClick={() => handleAnswer("yes")}
+            >
+              {language === "sw" ? "Ndiyo" : "Yes"}
+            </button>
+            <button
+              className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              onClick={() => handleAnswer("no")}
+            >
+              {language === "sw" ? "Hapana" : "No"}
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 mt-4">
+            {t.question} {currentQuestion + 1} {t.of} {questions.length}
+          </p>
+          <p className="text-sm text-gray-600 mt-2">
+            {t.answeringAs}: {userType === "student" ? t.student : t.parent}
+          </p>
+        </div>
+      );
+    };
+
+    const PathwayPlanner = ({ language, pathways, setStudentData, studentName, setView }) => {
+      const [preferences, setPreferences] = useState(["", ""]);
+      const availablePathways = pathways.map((p) => p.name);
+      const t = translations[language];
+
+      const handleDragStart = (e, pathway) => {
+        e.dataTransfer.setData("text/plain", pathway);
+      };
+
+      const handleDrop = (e, index) => {
+        const pathway = e.dataTransfer.getData("text/plain");
+        if (preferences.includes(pathway) && pathway !== preferences[index]) return;
+        const newPreferences = [...preferences];
+        newPreferences[index] = pathway;
+        setPreferences(newPreferences);
+      };
+
+      const handleDragOver = (e) => {
+        e.preventDefault();
+      };
+
+      const handleSubmit = async () => {
+        if (preferences[0]) {
+          const studentRef = db.collection("students").doc(`${studentName}-${new Date().toISOString()}`);
+          await studentRef.update({ preferences: preferences.filter((p) => p)});
+          setStudentData({ ...studentData, preferences: preferences.filter((p) => p)});
+          setView("results");
+          return;
+        } else {
+          alert(t === "Please select at least one pathway preference.");
+        }
+      };
+
+      return (
+        <div className="container bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+          <h2 className="text-xl font-bold text-center mb-4">{t.plannerTitle} {studentName}</h2>
+          <p className="text-gray-700 mb-4">{t.plannerDesc}</p>
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold">{t.availablePathways}</h3>
+            {availablePathways.map((pathway) => (
+              <div
+                key={pathway}
+                draggable
+                onDragStart={(e) => handleDragStart(e, pathway)}
+                className="p-2 bg-green-100 rounded mb-2 cursor-move"
+              >
+                {pathway}
+              </div>
+            ))}
+          </div>
+          <div className="mb-4">
+            <h3 className="text-lg font-semibold">{t.yourPreferences}</h3>
+            {[0, 1].map((index) => (
+              <div
+                key={index}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragOver={handleDragOver}
+                className="p-2 bg-gray-100 rounded mb-2 min-h-[40px] border"
+              >
+                {preferences[index] || `${t.dropPathway} ${index + 1}`}
+              </div>
+            ))}
+          </div>
+          <button
+            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            onClick={handleSubmit}
+          >
+            {t.submitPreferences}
+          </button>
+        </div>
+      );
+    };
+
+    const PathwayList = ({ language, pathways, studentName, studentData }) => {
+      const t = translations[language];
+
+      const handleDownload = () => {
+        const reportContent = `
+          <html>
+            <body style="font-family: Arial, sans-serif; padding: 20px;">
+              <h1>${t.resultsTitle} ${studentName}</h1>
+              <h2>${t.selectedPathway}: ${studentData.pathway}</h2>
+              <p><strong>${t.preferences}:</strong> ${studentData.preferences.join(", ")}</p>
+              <p><strong>${t.testScore}:</strong> ${studentData.score}/30</p>
+              <h3>Pathway Matches</h3>
+              ${pathways.map((p) => `
+                <p><strong>${p.name}:</strong> ${p.score.toFixed(0)}% ${t.matchScore}</p>
+                <p>${p.description}</p>
+                <p><strong>${t.keySubjects}:</strong> ${p.subjects.join(", ")}</p>
+                <p><strong>${t.sampleCareers}:</strong> ${p.careers.join(", ")}</p>
+                <p><strong>${t.topSchools}:</strong> ${p.schools.join(", ")}</p>
+              `).join("")}
+              <h3>${t.nextSteps}</h3>
+              <p>${t.nextStepsDesc}</p>
+              <a href="http://selection.education.go.ke">${t.visitSelection}</a>
+              <p><strong>${t.howToCheck}</strong></p>
+              <h3>${t.parentTips}</h3>
+              <p>${t.parentTipsDesc.replace(/\n/g, "<br />")}</p>
+            </body>
+          </html>
+        `;
+        const blob = new Blob([reportContent], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${studentName}_NjiaFinder_Report.html`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      return (
+        <div className="max-w-2xl w-full">
+          <h2 className="text-2xl font-bold text-center mb-6 text-green-800">
+            {t.resultsTitle} {studentName}
+          </h2>
+          <p className="text-lg text-gray-700 mb-4">
+            {t.testScore}: {studentData.score}/30 | {t.preferences}: {studentData.preferences.join(", ")}
+          </p>
+          {pathways.map((pathway) => (
+            <div className="bg-white p-4 rounded-lg shadow mb-4" key={pathway.name}>
+              <h3 className="text-xl font-semibold text-green-700">{pathway.name}</h3>
+              <div className="w-full bg-gray-200 rounded-full h-4 mb-2">
+                <div
+                  className="bg-green-600 h-4 rounded-full"
+                  style={{ width: `${pathway.score}%` }}
+                ></div>
+              </div>
+              <p className="text-sm text-gray-600 mb-2">{t.matchScore}: {pathway.score.toFixed(0)}%</p>
+              <p className="text-gray-700">{pathway.description}</p>
+              <p className="text-gray-600 mt-2">
+                <strong>{t.keySubjects}:</strong> {pathway.subjects.join(", ")}
+              </p>
+              <p className="text-gray-600">
+                <strong>{t.sampleCareers}:</strong> {pathway.careers.join(", ")}
+              </p>
+              <p className="text-gray-600">
+                <strong>{t.topSchools}:</strong> {pathway.schools.join(", ")}
+              </p>
+            </div>
+          ))}
+          <div className="bg-white p-4 rounded-lg shadow mt-6">
+            <h3 className="text-xl font-semibold text-green-700">{t.nextSteps}</h3>
+            <p className="text-gray-700">{t.nextStepsDesc}</p>
+            <a
+              href="http://selection.education.go.ke"
+              target="_blank"
+              className="text-blue-600 underline"
+            >
+              {t.visitSelection}
+            </a>
+            <p className="text-gray-600 mt-2">{t.howToCheck}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow mt-6">
+            <h3 className="text-xl font-semibold text-green-700">{t.parentTips}</h3>
+            <p className="text-gray-700">{t.parentTipsDesc.replace(/\n/g, "<br />")}</p>
+          </div>
+          <button
+            className="mt-6 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+            onClick={handleDownload}
+          >
+            {t.downloadReport}
+          </button>
+          <button
+            className="mt-4 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            onClick={() => setView("start")}
+          >
+            {t.back}
+          </button>
+        </div>
+      );
+    };
+
+    const AdminDashboard = ({ language, setView }) => {
+      const [password, setPassword] = useState("");
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [studentData, setStudentData] = useState([]);
+      const t = translations[language];
+
+      React.useEffect(() => {
+        if (isAuthenticated) {
+          db.collection("students").onSnapshot((snapshot) => {
+            const data = snapshot.docs.map((doc) => doc.data());
+            setStudentData(data);
+          });
+        }
+      }, [isAuthenticated]);
+
+      const handleLogin = () => {
+        if (password === "acres2025") {
+          setIsAuthenticated(true);
+        } else {
+          alert("Incorrect password");
+        }
+      };
+
+      if (!isAuthenticated) {
+        return (
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold text-center mb-4">{t.adminTitle}</h2>
+            <input
+              type="password"
+              placeholder={t.adminPassword}
+              className="w-full p-2 mb-4 border rounded"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              onClick={handleLogin}
+            >
+              {t.adminLogin}
+            </button>
+            <button
+              className="mt-4 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+              onClick={() => setView("start")}
+            >
+              {t.back}
+            </button>
+          </div>
+        );
+      }
+
+      const pathwayCounts = pathways.reduce((acc, p) => ({ ...acc, [p.name]: 0 }), {});
+      studentData.forEach((data) => {
+        pathwayCounts[data.pathway] = (pathwayCounts[data.pathway] || 0) + 1;
+      });
+
+      return (
+        <div className="max-w-4xl w-full">
+          <h2 className="text-2xl font-bold text-center mb-6 text-green-800">{t.adminDashboard}</h2>
+          <h3 className="text-xl font-semibold mb-4">{t.pathwayPopularity}</h3>
+          {Object.entries(pathwayCounts).map(([pathway, count]) => (
+            <p key={pathway} className="text-gray-700">
+              {pathway}: {count} {t.student}
+            </p>
+          ))}
+          <h3 className="text-xl font-semibold mt-6 mb-4">{t.studentDetails}</h3>
+          {studentData.map((data, index) => (
+            <div key={index} className="bg-white p-4 rounded-lg shadow mb-4">
+              <p><strong>{t.name}:</strong> {data.name}</p>
+              <p><strong>{t.selectedPathway}:</strong> {data.pathway}</p>
+              <p><strong>{t.rankedPreferences}:</strong> {data.preferences.join(", ")}</p>
+              <p><strong>{t.testScore}:</strong> {data.score}/30</p>
+              <p><strong>{t.answers}:</strong></p>
+              <ul className="list-disc pl-6">
+                {data.answers.map((a, i) => (
+                  <li key={i} className={a.isCorrect ? "text-green-600" : "text-red-600"}>
+                    {a.question}: {a.answer} ({a.isCorrect ? t.correct : t.incorrect})
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+          <button
+            className="mt-6 bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600"
+            onClick={() => setView("start")}
+          >
+            {t.back}
+          </button>
+        </div>
+      );
+    };
+
+    const App = () => {
+      const [view, setView] = useState("start");
+      const [studentName, setStudentName] = useState("");
+      const [results, setResults] = useState(null);
+      const [studentData, setStudentData] = useState(null);
+      const [language, setLanguage] = useState("sw");
+
+      const toggleLanguage = () => {
+        setLanguage(language === "en" ? "sw" : "en");
+      };
+
+      const t = translations[language];
+
+      if (view === "start") {
+        return (
+          <div className="max-w-md w-full bg-white p-6 rounded-lg shadow-lg">
+            <h1 className="text-3xl font-bold text-green-800 mb-4">{t.appName}</h1>
+            <p className="text-lg text-gray-700 mb-4">By Acres of Mercy Kenya</p>
+            <p className="text-md text-gray-600 mb-6">{t.startDesc}</p>
+            <button
+              className="mb-4 bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+              onClick={toggleLanguage}
+            >
+              {language === "en" ? "Kiswahili" : "English"}
+            </button>
+            <input
+              type="text"
+              placeholder={language === "en" ? "Enter student's full name" : "Ingiza jina kamili la mwanafunzi"}
+              className="w-full p-2 mb-4 border rounded"
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+            />
+            <button
+              className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+              onClick={() => studentName.trim() ? setView("payment") : alert("Please enter a student name.")}
+            >
+              {t.payButton}
+            </button>
+            <button
+              className="mt-4 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              onClick={() => setView("admin")}
+            >
+              {t.adminLogin}
+            </button>
+          </div>
+        );
+      }
+
+      if (view === "payment") {
+        return <PaymentScreen language={language} studentName={studentName} setView={setView} />;
+      }
+
+      if (view === "quiz") {
+        return (
+          <Quiz
+            language={language}
+            setResults={setResults}
+            studentName={studentName}
+            setStudentData={setStudentData}
+            setView={setView}
+          />
+        );
+      }
+
+      if (view === "planner") {
+        return (
+          <PathwayPlanner
+            language={language}
+            pathways={results}
+            setStudentData={setStudentData}
+            studentName={studentName}
+            setView={setView}
+          />
+        );
+      }
+
+      if (view === "results") {
+        return <PathwayList language={language} pathways={results} studentName={studentName} studentData={studentData} />;
+      }
+
+      if (view === "admin") {
+        return <AdminDashboard language={language} setView={setView} />;
+      }
+
+      return null;
+    };
+
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
